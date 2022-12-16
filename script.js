@@ -36,18 +36,64 @@ window.addEventListener('load', function (){
             this.height = 3;
             this.speed = 3;
             this.markedForDeletion = false
+            this.image = document.getElementById('projectile')
         }
         update() {
             this.x += this.speed
             if(this.x > this.game.width * 0.8) this.markedForDeletion = true;
         }
         draw(context) {
-            context.fillStyle = 'yellow';
-            context.fillRect(this.x, this.y, this.width, this.height)
+            context.drawImage(this.image, this.x, this.y)
         }
     }
     class Particle {
-
+        constructor(game, x, y) {
+            this.game = game;
+            this.x = x;
+            this.y = y;
+            this.image = document.getElementById('gears')
+            this.frameX = Math.floor(Math.random() * 3)
+            this.frameY = Math.floor(Math.random() * 3)
+            this.spriteSize = 50;
+            this.sizeModifier = (Math.random() * 0.5 + 0.5).toFixed(1)
+            this.size = this.spriteSize * this.sizeModifier
+            this.speedX = Math.random() * 6 - 3;
+            this.speedY = Math.random() * -15;
+            this.gravity = 0.5;
+            this.markedForDeletion = false;
+            this.angle = 0;
+            this.va = Math.random() * 0.2 - 0.1
+            this.bounced = 0;
+            this.bottomBounceBoundary = Math.random() * 80 + 60;
+        }
+        update(){
+            this.angle += this.va;
+            this.speedY += this.gravity
+            this.x -= this.speedX + this.game.speed
+            this.y += this.speedY
+            if(this.y > this.game.height + this.size || this.x < 0 - this.size) this.markedForDeletion = true
+            if(this.y > this.game.height - this.bottomBounceBoundary && this.bounced < 5) {
+                this.bounced++
+                this.speedY *= -0.5
+            }
+        }
+        draw(context) {
+            context.save();
+            context.translate(this.x, this.y);
+            context.rotate(this.angle)
+            context.drawImage(
+                this.image,
+                this.frameX * this.spriteSize,
+                this.frameY * this.spriteSize,
+                this.spriteSize,
+                this.spriteSize,
+                this.size * -0.5,
+                this.size * -0.5,
+                this.size,
+                this.size
+            )
+            context.restore()
+        }
     }
     class Player {
         constructor(game) {
@@ -67,11 +113,14 @@ window.addEventListener('load', function (){
             this.powerUpTimer = 0;
             this.powerUpLimit = 10000;
         }
-        update() {
+        update(deltaTime) {
             if(this.game.keys.includes('ArrowUp')) this.speedY = -this.maxSpeed
             else if(this.game.keys.includes('ArrowDown')) this.speedY = this.maxSpeed
             else this.speedY = 0;
             this.y += this.speedY
+            // vertical boundaries
+            if(this.y > this.game.height - this.height * 0.5) this.y = this.game.height - this.height * 0.5
+            else if(this.y < -this.height * 0.5) this.y = -this.height * 0.5;
             // handle projectiles
             this.projectiles.forEach(projectile => {
                 projectile.update()
@@ -84,21 +133,43 @@ window.addEventListener('load', function (){
                 this.frameX = 0;
             }
             // power up
+            if (this.powerUp) {
+                if (this.powerUpTimer > this.powerUpLimit) {
+                    this.powerUpTimer = 0
+                    this.powerUp = false;
+                    this.frameY = 0;
+                } else {
+                    this.powerUpTimer += deltaTime;
+                    this.frameY = 1;
+                    this.game.ammo += 0.1;
+                }
+            }
 
         }
         draw(context) {
             if (this.game.debug) context.strokeRect(this.x, this.y, this.width, this.height)
-            context.drawImage(this.image, this.frameX * this.width, this.frameY * this.height, this.width, this.height, this.x, this.y, this.width, this.height)
             this.projectiles.forEach(projectile => {
                 projectile.draw(context)
             })
+            context.drawImage(this.image, this.frameX * this.width, this.frameY * this.height, this.width, this.height, this.x, this.y, this.width, this.height)
         }
         shootTop() {
             if (this.game.ammo > 0) {
                 this.projectiles.push(new Projectile(this.game, this.x + 80, this.y + 30))
                 this.game.ammo--;
             }
-
+            if (this.powerUp) this.shootBottom()
+        }
+        shootBottom() {
+            if (this.game.ammo > 0) {
+                this.projectiles.push(new Projectile(this.game, this.x + 80, this.y + 175))
+                this.game.ammo--;
+            }
+        }
+        enterPowerUp() {
+            this.powerUpTimer = 0
+            this.powerUp = true;
+            if (this.game.ammo < this.game.maxAmmo) this.game.ammo = this.game.maxAmmo;
 
         }
     }
@@ -133,8 +204,11 @@ window.addEventListener('load', function (){
                 this.width,
                 this.height
             )
-            context.font = '20px Helvetica'
-            context.fillText(this.lives, this.x, this.y )
+            if(this.game.debug) {
+                context.font = '20px Helvetica'
+                context.fillText(this.lives, this.x, this.y)
+            }
+
         }
     }
 
@@ -224,7 +298,7 @@ window.addEventListener('load', function (){
         constructor(game) {
             this.game = game;
             this.fontSize = 25;
-            this.fontFamily = 'Helvetica';
+            this.fontFamily = 'Bangers';
             this.color = 'white'
         }
         draw(context) {
@@ -236,10 +310,6 @@ window.addEventListener('load', function (){
             context.font = this.fontSize + 'px ' + this.fontFamily
             //score
             context.fillText('Score: ' + this.game.score, 20, 40)
-            //ammo
-            for (let i = 0; i<this.game.ammo; i++) {
-                context.fillRect(20 + 5 * i, 50, 3, 20)
-            }
             //timer
             const formattedTime = (this.game.gameTime * 0.001).toFixed()
             context.fillText('Timer:' + formattedTime, 20, 100)
@@ -249,16 +319,21 @@ window.addEventListener('load', function (){
                 let message1
                 let message2
                 if(this.game.score > this.game.winningScore) {
-                    message1 = 'You Win!!'
-                    message2 = 'Well done!'
+                    message1 = 'Most Wondrous!'
+                    message2 = 'Well done! explorer'
                 } else {
-                    message1 = 'You lose!'
-                    message2 = 'Try again next time!'
+                    message1 = 'Blazes!'
+                    message2 = 'Get my repair kit and try again!'
                 }
-                context.font = '50px' + this.fontFamily
-                context.fillText(message1, this.game.width * 0.5, this.game.height * 0.5 - 40)
+                context.font = '70px' + this.fontFamily
+                context.fillText(message1, this.game.width * 0.5, this.game.height * 0.5 - 20)
                 context.font = '25px' + this.fontFamily
-                context.fillText(message2, this.game.width * 0.5, this.game.height * 0.5)
+                context.fillText(message2, this.game.width * 0.5, this.game.height * 0.5 + 20)
+            }
+            //ammo
+            if(this.game.player.powerUp) context.fillStyle = '#ffffbd'
+            for (let i = 0; i<this.game.ammo; i++) {
+                context.fillRect(20 + 5 * i, 50, 3, 20)
             }
             context.restore()
         }
@@ -274,6 +349,7 @@ window.addEventListener('load', function (){
             this.ui = new UI(this)
             this.keys = [];
             this.enemies = [];
+            this.particles = [];
             this.enemyTimer = 0;
             this.enemyInterval = 1000;
             this.ammo = 20;
@@ -286,7 +362,7 @@ window.addEventListener('load', function (){
             this.gameTime = 0
             this.timeLimit = 15000
             this.speed = 1
-            this.debug = true;
+            this.debug = false;
 
         }
         update(deltaTime) {
@@ -294,25 +370,41 @@ window.addEventListener('load', function (){
             if(this.gameTime > this.timeLimit) this.gameOver = true
             this.background.update()
             this.background.layer4.update()
-            this.player.update()
+            this.player.update(deltaTime)
             if(this.ammoTimer > this.ammoInterval) {
                 if(this.ammo < this.maxAmmo) this.ammo++;
                 this.ammoTimer = 0;
             } else {
                 this.ammoTimer += deltaTime
             }
+            this.particles.forEach(particle => particle.update())
+            this.particles = this.particles.filter(particle => !particle.markedForDeletion)
             this.enemies.forEach(enemy => {
                 enemy.update()
                 if (this.checkCollision(this.player, enemy)) {
                     enemy.markedForDeletion = true
+                    for(let i = 0; i < 10; i++) {
+                        this.particles.push(new Particle(this, enemy.x + enemy.width
+                            * 0.5, enemy.y + enemy.height * 0.5))
+                    }
+                    if(enemy.type === 'lucky') this.player.enterPowerUp()
+                    else this.score--;
+
+
                 }
                 this.player.projectiles.forEach(projectile => {
                     if (this.checkCollision(projectile, enemy)) {
                         enemy.lives--;
                         projectile.markedForDeletion = true
+                        this.particles.push(new Particle(this, enemy.x + enemy
+                            .width * 0.5, enemy.y + enemy.height * 0.5))
                         if(enemy.lives <= 0) {
+                            for(let i = 0; i < 10; i++) {
+                                this.particles.push(new Particle(this, enemy.x + enemy.width
+                                    * 0.5, enemy.y + enemy.height * 0.5))
+                            }
                             enemy.markedForDeletion = true
-                            if(!this.gameOver)this.score += enemy.score
+                            if(!this.gameOver) this.score += enemy.score
                             if (this.score > this.winningScore) this.gameOver = true
                         }
                     }
@@ -329,8 +421,9 @@ window.addEventListener('load', function (){
         }
         draw(context) {
             this.background.draw(context)
-            this.player.draw(context)
             this.ui.draw(context)
+            this.player.draw(context)
+            this.particles.forEach(particle => particle.draw(context))
             this.enemies.forEach(enemy => {
                 enemy.draw(context)
             })
